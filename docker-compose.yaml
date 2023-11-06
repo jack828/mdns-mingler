@@ -1,0 +1,11 @@
+version: "3.8"
+services:
+  mdns-mingler:
+    build:
+      dockerfile: ./Dockerfile
+    container_name: mdns-mingler
+    volumes:
+      - ./hosts:/hosts:ro
+    ports:
+      - 127.0.0.1:5353:5353
+
