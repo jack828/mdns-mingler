@@ -1,5 +1,5 @@
 const multicastdns = require("multicast-dns")
-const mdns = multicastdns()
+const mdns = multicastdns({ bind: "0.0.0.0" })
 const { readFileSync } = require("node:fs")
 
 const hostFileRaw = readFileSync("/hosts", "utf8")
