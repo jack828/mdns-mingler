@@ -19,6 +19,7 @@ console.log(
     .map(([hostname, ip]) => `${hostname} -> ${ip}`)
     .join("\n")
 )
+console.log(`Total host count: ${Object.entries(hosts).length}`)
 
 mdns.on("query", (query) => {
   const name = query.questions[0].name
