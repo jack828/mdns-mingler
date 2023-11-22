@@ -32,7 +32,7 @@ mdns.on("query", (query) => {
   mdns.respond({
     answers: [
       {
-        name,
+        name: name + '.',
         type: "A", // IPv4
         ttl: 300,
         data: ip
