@@ -589,6 +589,28 @@ int main(int argc, char **argv) {
 
   signal(SIGINT, signal_handler);
 
+  FILE *fp = fopen(arguments.hosts, "r");
+  if (fp == NULL) {
+    perror("Unable to open hosts file");
+    exit(EXIT_FAILURE);
+  }
+
+  char line[256];
+  while (fgets(line, sizeof(line), fp) != NULL) {
+    int length = strlen(line);
+    if (length <= 1) {
+      // ignore empty
+      continue;
+    }
+    if (line[0] == '#') {
+      // ignore comments
+      continue;
+    }
+    // trim trailing newline
+    line[strcspn(line, "\n")] = '\0';
+    printf("line: '%s'\n", line);
+  }
+  fclose(fp);
   int ret = service_mdns("plex", arguments.service);
 
   return ret;
