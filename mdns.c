@@ -1,17 +1,15 @@
+#include "mdns.h"
 
-#include <stdbool.h>
-#include <stdio.h>
-
+#include <argp.h>
 #include <errno.h>
-#include <signal.h>
-
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
-
-#include "mdns.h"
 
 static char addrbuffer[64];
 static char namebuffer[256];
@@ -537,34 +535,64 @@ static int service_mdns(const char *hostname, const char *service_name,
 
 void signal_handler(int signal) { running = 0; }
 
-int main(int argc, const char *const *argv) {
-  const char *service = "_http._tcp.local.";
-  const char *hostname = "dummy-host";
+const char *argp_program_version = "mdns-mingler 1.0";
+const char *argp_program_bug_address = "Jack Burgess <me@jackburgess.dev>";
+
+static char doc[] = "mDNS Mingling Utility. So a mDNS server of sorts.";
+
+static char args_doc[] = "";
+
+static struct argp_option options[] = {
+    {.name = "service",
+     .key = 's',
+     .arg = "SERVICE",
+     .flags = OPTION_ARG_OPTIONAL,
+     .doc = "Service name e.g. '_http._tcp.local.'",
+     .group = 0},
+    {.name = "hosts",
+     .key = 'g',
+     .arg = "HOSTS",
+     .flags = OPTION_ARG_OPTIONAL,
+     .doc = "Path to hosts file. Default './hosts'.",
+     .group = 1},
+    {0}};
+
+struct arguments {
+  char *service;
+  char *hosts;
+};
+
+static error_t parse_opt(int key, char *arg, struct argp_state *state) {
+  struct arguments *arguments = state->input;
+
+  switch (key) {
+  case 's':
+    arguments->service = arg;
+    break;
+  case 'h':
+    arguments->hosts = arg;
+    break;
+  default:
+    return ARGP_ERR_UNKNOWN;
+  }
+  return 0;
+}
+
+static struct argp argp = {options, parse_opt, args_doc, doc};
+
+int main(int argc, char **argv) {
+  struct arguments arguments;
+  /* Default values */
+  arguments.service = "_http._tcp.local.";
+  arguments.hosts = "./hosts";
+
+  argp_parse(&argp, argc, argv, 0, 0, &arguments);
+
   int service_port = 42424;
 
-  char hostname_buffer[256];
-  size_t hostname_size = sizeof(hostname_buffer);
-  if (gethostname(hostname_buffer, hostname_size) == 0)
-    hostname = hostname_buffer;
   signal(SIGINT, signal_handler);
 
-  for (int iarg = 0; iarg < argc; ++iarg) {
-    if (strcmp(argv[iarg], "--service") == 0) {
-      ++iarg;
-      if (iarg < argc)
-        service = argv[iarg];
-    } else if (strcmp(argv[iarg], "--hostname") == 0) {
-      ++iarg;
-      if (iarg < argc)
-        hostname = argv[iarg];
-    } else if (strcmp(argv[iarg], "--port") == 0) {
-      ++iarg;
-      if (iarg < argc)
-        service_port = atoi(argv[iarg]);
-    }
-  }
-
-  int ret = service_mdns(hostname, service, service_port);
+  int ret = service_mdns("plex", arguments.service, service_port);
 
   return ret;
 }
