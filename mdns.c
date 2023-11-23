@@ -151,7 +151,7 @@ static int service_callback(int sock, const struct sockaddr *from,
       // records containing the SRV record mapping the service instance name to
       // our qualified hostname (typically "<hostname>.local.") and port, as
       // well as any IPv4 address for the hostname as A records, and
-      // two test TXT records
+      // TXT records
 
       // Answer PTR record reverse mapping "<_service-name>._tcp.local." to
       // "<hostname>.<_service-name>._tcp.local."
@@ -168,7 +168,7 @@ static int service_callback(int sock, const struct sockaddr *from,
       if (service->address_ipv4.sin_family == AF_INET)
         additional[additional_count++] = service->record_a;
 
-      // Add two test TXT records for our service instance name, will be
+      // Add TXT records for our service instance name, will be
       // coalesced into one record with both key-value pair strings by the
       // library
       additional[additional_count++] = service->txt_record[0];
@@ -197,7 +197,7 @@ static int service_callback(int sock, const struct sockaddr *from,
       // "<hostname>.<_service-name._tcp.local"), answer a SRV record mapping
       // the service instance name to our qualified hostname (typically
       // "<hostname>.local.") and port, as well as any IPv4 address for the
-      // hostname as A records, and two test TXT records
+      // hostname as A records, and TXT records
 
       // Answer PTR record reverse mapping "<_service-name>._tcp.local." to
       // "<hostname>.<_service-name>._tcp.local."
@@ -210,7 +210,7 @@ static int service_callback(int sock, const struct sockaddr *from,
       if (service->address_ipv4.sin_family == AF_INET)
         additional[additional_count++] = service->record_a;
 
-      // Add two test TXT records for our service instance name, will be
+      // Add TXT records for our service instance name, will be
       // coalesced into one record with both key-value pair strings by the
       // library
       additional[additional_count++] = service->txt_record[0];
@@ -238,7 +238,7 @@ static int service_callback(int sock, const struct sockaddr *from,
         (service->address_ipv4.sin_family == AF_INET)) {
       // The A query was for our qualified hostname (typically
       // "<hostname>.local.") and we have an IPv4 address, answer with an A
-      // record mapping the hostname to an IPv4 address and two test TXT records
+      // record mapping the hostname to an IPv4 address and TXT records
 
       // Answer A records mapping "<hostname>.local." to IPv4 address
       mdns_record_t answer = service->record_a;
@@ -246,7 +246,7 @@ static int service_callback(int sock, const struct sockaddr *from,
       mdns_record_t additional[5] = {0};
       size_t additional_count = 0;
 
-      // Add two test TXT records for our service instance name, will be
+      // Add TXT records for our service instance name, will be
       // coalesced into one record with both key-value pair strings by the
       // library
       additional[additional_count++] = service->txt_record[0];
@@ -365,8 +365,7 @@ static int open_service_sockets(int *sockets, int max_sockets) {
 }
 
 // Provide a mDNS service, answering incoming DNS-SD and mDNS queries
-static int service_mdns(const char *hostname, const char *service_name,
-                        int service_port) {
+static int service_mdns(const char *hostname, const char *service_name) {
   int sockets[32];
   int num_sockets =
       open_service_sockets(sockets, sizeof(sockets) / sizeof(sockets[0]));
@@ -390,7 +389,7 @@ static int service_mdns(const char *hostname, const char *service_name,
   service_name_buffer[service_name_length] = 0;
   service_name = service_name_buffer;
 
-  printf("Service mDNS: %s:%d\n", service_name, service_port);
+  printf("Service mDNS: %s:%d\n", service_name, 80);
   printf("Hostname: %s\n", hostname);
 
   size_t capacity = 2048;
@@ -421,7 +420,7 @@ static int service_mdns(const char *hostname, const char *service_name,
   service.service_instance = service_instance_string;
   service.hostname_qualified = hostname_qualified_string;
   service.address_ipv4 = service_address_ipv4;
-  service.port = service_port;
+  service.port = 80;
 
   // Setup our mDNS records
 
@@ -453,7 +452,7 @@ static int service_mdns(const char *hostname, const char *service_name,
                                      .rclass = 0,
                                      .ttl = 0};
 
-  // Add two test TXT records for our service instance name, will be coalesced
+  // Add TXT records for our service instance name, will be coalesced
   // into one record with both key-value pair strings by the library
   service.txt_record[0] =
       (mdns_record_t){.name = service.service_instance,
@@ -550,7 +549,7 @@ static struct argp_option options[] = {
      .doc = "Service name e.g. '_http._tcp.local.'",
      .group = 0},
     {.name = "hosts",
-     .key = 'g',
+     .key = 'h',
      .arg = "HOSTS",
      .flags = OPTION_ARG_OPTIONAL,
      .doc = "Path to hosts file. Default './hosts'.",
@@ -588,11 +587,9 @@ int main(int argc, char **argv) {
 
   argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
-  int service_port = 42424;
-
   signal(SIGINT, signal_handler);
 
-  int ret = service_mdns("plex", arguments.service, service_port);
+  int ret = service_mdns("plex", arguments.service);
 
   return ret;
 }
