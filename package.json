@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "multicast-dns": "^7.2.5"
+    "multicast-dns": "^7.2.5",
+    "nodemon": "^3.0.1"
   }
 }
