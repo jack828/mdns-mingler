@@ -1,5 +1,11 @@
 # mdns-mingler
 
+## TODO DOCS
+
+libuv1-dev
+
+
+
 Allow multiple hostnames to resolve to the same (or not) IP address in mDNS
 
 Read more including installation and usage with Traefik on my blog <https://jackburgess.dev/blog/truenas-apps-access-via-mdns>
