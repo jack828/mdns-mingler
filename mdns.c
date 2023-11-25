@@ -1,4 +1,5 @@
 #include "mdns.h"
+#include "uv_mdns.h"
 
 #include <argp.h>
 #include <errno.h>
@@ -10,6 +11,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <uv.h>
+
+#define UV_CHECK(r, msg)                                                       \
+  if (r < 0) {                                                                 \
+    fprintf(stderr, "%s: %s\n", msg, uv_strerror(r));                          \
+    exit(1);                                                                   \
+  }
+
+static uv_loop_t *uv_loop;
+static uv_udp_t server;
 
 static char addrbuffer[64];
 static char namebuffer[256];
@@ -49,6 +60,8 @@ static mdns_string_t ipv4_address_to_string(char *buffer, size_t capacity,
       len = snprintf(buffer, capacity, "%s:%s", host, service);
     else
       len = snprintf(buffer, capacity, "%s", host);
+  } else {
+    printf("ipv4_address_to_string fail ret: %d: %s\n", ret, gai_strerror(ret));
   }
   if (len >= (int)capacity)
     len = (int)capacity - 1;
@@ -534,6 +547,140 @@ static int service_mdns(const char *hostname, const char *service_name) {
 
 void signal_handler(int signal) { running = 0; }
 
+static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
+                    const struct sockaddr *addr, unsigned flags) {
+
+  char* service_name = "_http._tcp.local.";
+  char* hostname = "plex";
+  size_t service_name_length = strlen(service_name);
+  char *service_name_buffer = malloc(service_name_length + 2);
+  memcpy(service_name_buffer, service_name, service_name_length);
+  if (service_name_buffer[service_name_length - 1] != '.')
+    service_name_buffer[service_name_length++] = '.';
+  service_name_buffer[service_name_length] = 0;
+  service_name = service_name_buffer;
+
+  printf("Service mDNS: %s:%d\n", service_name, 80);
+  printf("Hostname: %s\n", hostname);
+
+  size_t capacity = 2048;
+  void *buffer = malloc(capacity);
+
+  mdns_string_t service_string =
+      (mdns_string_t){service_name, strlen(service_name)};
+  mdns_string_t hostname_string = (mdns_string_t){hostname, strlen(hostname)};
+
+  // Build the service instance "<hostname>.<_service-name>._tcp.local." string
+  char service_instance_buffer[256] = {0};
+  snprintf(service_instance_buffer, sizeof(service_instance_buffer) - 1,
+           "%.*s.%.*s", MDNS_STRING_FORMAT(hostname_string),
+           MDNS_STRING_FORMAT(service_string));
+  mdns_string_t service_instance_string =
+      (mdns_string_t){service_instance_buffer, strlen(service_instance_buffer)};
+
+  // Build the "<hostname>.local." string
+  char qualified_hostname_buffer[256] = {0};
+  snprintf(qualified_hostname_buffer, sizeof(qualified_hostname_buffer) - 1,
+           "%.*s.local.", MDNS_STRING_FORMAT(hostname_string));
+  mdns_string_t hostname_qualified_string = (mdns_string_t){
+      qualified_hostname_buffer, strlen(qualified_hostname_buffer)};
+
+  service_t service = {0};
+  service.service = service_string;
+  service.hostname = hostname_string;
+  service.service_instance = service_instance_string;
+  service.hostname_qualified = hostname_qualified_string;
+  service.address_ipv4 = service_address_ipv4;
+  service.port = 80;
+
+  // Setup our mDNS records
+
+  // PTR record reverse mapping "<_service-name>._tcp.local." to
+  // "<hostname>.<_service-name>._tcp.local."
+  service.record_ptr =
+      (mdns_record_t){.name = service.service,
+                      .type = MDNS_RECORDTYPE_PTR,
+                      .data.ptr.name = service.service_instance,
+                      .rclass = 0,
+                      .ttl = 0};
+
+  // SRV record mapping "<hostname>.<_service-name>._tcp.local." to
+  // "<hostname>.local." with port. Set weight & priority to 0.
+  service.record_srv =
+      (mdns_record_t){.name = service.service_instance,
+                      .type = MDNS_RECORDTYPE_SRV,
+                      .data.srv.name = service.hostname_qualified,
+                      .data.srv.port = service.port,
+                      .data.srv.priority = 0,
+                      .data.srv.weight = 0,
+                      .rclass = 0,
+                      .ttl = 0};
+
+  // A records mapping "<hostname>.local." to IPv4 addresses
+  service.record_a = (mdns_record_t){.name = service.hostname_qualified,
+                                     .type = MDNS_RECORDTYPE_A,
+                                     .data.a.addr = service.address_ipv4,
+                                     .rclass = 0,
+                                     .ttl = 0};
+
+  // Add TXT records for our service instance name, will be coalesced
+  // into one record with both key-value pair strings by the library
+  service.txt_record[0] =
+      (mdns_record_t){.name = service.service_instance,
+                      .type = MDNS_RECORDTYPE_TXT,
+                      .data.txt.key = {MDNS_STRING_CONST("x-powered-by")},
+                      .data.txt.value = {MDNS_STRING_CONST("mdns-mingler")},
+                      .rclass = 0,
+                      .ttl = 0};
+
+
+  if (nread < 0) {
+    fprintf(stderr, "Read error %s\n", uv_err_name(nread));
+    free(buf->base);
+    return;
+  }
+  if (nread > 0) {
+    char sender[17] = {0};
+    uv_ip4_name((const struct sockaddr_in *)addr, sender, 16);
+    printf("\nPacket from from %s\n", sender);
+    printf("Size: %lu %.*s\n", nread, nread, buf->base);
+    for (int i = 0; i < nread; i++) {
+      printf("%02X", buf->base[i]);
+    }
+    printf("\n");
+    uvmdns_socket_recv(buf, addr, service_callback, &service);
+  }
+  free(buf->base);
+}
+
+static void on_walk_cleanup(uv_handle_t *handle, void *data) {
+  uv_close(handle, NULL);
+}
+
+static void on_close(uv_handle_t *handle) {
+  printf("Closing, goodbye");
+  // http://stackoverflow.com/questions/25615340/closing-libuv-handles-correctly
+  uv_stop(uv_loop);
+  uv_run(uv_loop, UV_RUN_DEFAULT);
+  uv_walk(uv_loop, on_walk_cleanup, NULL);
+  uv_run(uv_loop, UV_RUN_DEFAULT);
+  uv_loop_close(uv_loop);
+}
+
+static void on_signal(uv_signal_t *signal, int signum) {
+  if (uv_is_active((uv_handle_t *)&server)) {
+    uv_udp_recv_stop(&server);
+  }
+  uv_close((uv_handle_t *)&server, on_close);
+  uv_signal_stop(signal);
+}
+
+static void on_alloc(uv_handle_t *handle, size_t suggested_size,
+                     uv_buf_t *buf) {
+  buf->base = calloc(1, suggested_size);
+  buf->len = suggested_size;
+}
+
 const char *argp_program_version = "mdns-mingler 1.0";
 const char *argp_program_bug_address = "Jack Burgess <me@jackburgess.dev>";
 
@@ -611,7 +758,29 @@ int main(int argc, char **argv) {
     printf("line: '%s'\n", line);
   }
   fclose(fp);
-  int ret = service_mdns("plex", arguments.service);
 
-  return ret;
+  int status;
+  struct sockaddr_in addr;
+
+  uv_signal_t sigint, sigterm;
+  uv_loop = uv_default_loop();
+
+  status = uv_udp_init(uv_loop, &server);
+  UV_CHECK(status, "init");
+  uv_signal_init(uv_loop, &sigint);
+  uv_signal_start(&sigint, on_signal, SIGINT);
+  uv_signal_init(uv_loop, &sigterm);
+  uv_signal_start(&sigterm, on_signal, SIGTERM);
+
+  uv_ip4_addr("0.0.0.0", MDNS_PORT, &addr);
+
+  status =
+      uv_udp_bind(&server, (const struct sockaddr *)&addr, UV_UDP_REUSEADDR);
+  UV_CHECK(status, "bind");
+
+  status = uv_udp_recv_start(&server, on_alloc, on_recv);
+  UV_CHECK(status, "recv");
+
+  return uv_run(uv_loop, UV_RUN_DEFAULT);
+  // return service_mdns("plex", arguments.service);
 }
