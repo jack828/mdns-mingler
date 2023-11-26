@@ -1,5 +1,4 @@
 #include "mdns.h"
-#include "uv_mdns.h"
 
 #include <argp.h>
 #include <errno.h>
@@ -46,6 +45,11 @@ typedef struct {
   mdns_record_t txt_record[2];
 } service_t;
 
+typedef struct {
+  service_t *service;
+  uv_udp_t *handle;
+} mdns_data_t;
+
 static mdns_string_t ipv4_address_to_string(char *buffer, size_t capacity,
                                             const struct sockaddr_in *addr,
                                             size_t addrlen) {
@@ -87,11 +91,17 @@ static int service_callback(int sock, const struct sockaddr *from,
                             size_t record_offset, size_t record_length,
                             void *user_data) {
   (void)sizeof(ttl);
-  if (entry != MDNS_ENTRYTYPE_QUESTION)
+  printf("service_callback: ");
+  if (entry != MDNS_ENTRYTYPE_QUESTION) {
+    printf("no\n");
     return 0;
+  }
+  printf("yes\n");
 
   const char dns_sd[] = "_services._dns-sd._udp.local.";
-  const service_t *service = (const service_t *)user_data;
+  const mdns_data_t *mdns_data = (const mdns_data_t *)user_data;
+  const service_t *service = (const service_t *)mdns_data->service;
+  uv_udp_t *handle = mdns_data->handle;
 
   mdns_string_t fromaddrstr =
       ip_address_to_string(addrbuffer, sizeof(addrbuffer), from, addrlen);
@@ -147,11 +157,11 @@ static int service_callback(int sock, const struct sockaddr *from,
              (unicast ? "unicast" : "multicast"));
 
       if (unicast) {
-        mdns_query_answer_unicast(sock, from, addrlen, sendbuffer,
+        mdns_query_answer_unicast(handle, from, addrlen, sendbuffer,
                                   sizeof(sendbuffer), query_id, rtype, name.str,
                                   name.length, answer, 0, 0, 0, 0);
       } else {
-        mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer),
+        mdns_query_answer_multicast(handle, sendbuffer, sizeof(sendbuffer),
                                     answer, 0, 0, 0, 0);
       }
     }
@@ -193,12 +203,12 @@ static int service_callback(int sock, const struct sockaddr *from,
              (unicast ? "unicast" : "multicast"));
 
       if (unicast) {
-        mdns_query_answer_unicast(sock, from, addrlen, sendbuffer,
+        mdns_query_answer_unicast(handle, from, addrlen, sendbuffer,
                                   sizeof(sendbuffer), query_id, rtype, name.str,
                                   name.length, answer, 0, 0, additional,
                                   additional_count);
       } else {
-        mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer),
+        mdns_query_answer_multicast(handle, sendbuffer, sizeof(sendbuffer),
                                     answer, 0, 0, additional, additional_count);
       }
     }
@@ -235,12 +245,12 @@ static int service_callback(int sock, const struct sockaddr *from,
              service->port, (unicast ? "unicast" : "multicast"));
 
       if (unicast) {
-        mdns_query_answer_unicast(sock, from, addrlen, sendbuffer,
+        mdns_query_answer_unicast(handle, from, addrlen, sendbuffer,
                                   sizeof(sendbuffer), query_id, rtype, name.str,
                                   name.length, answer, 0, 0, additional,
                                   additional_count);
       } else {
-        mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer),
+        mdns_query_answer_multicast(handle, sendbuffer, sizeof(sendbuffer),
                                     answer, 0, 0, additional, additional_count);
       }
     }
@@ -275,15 +285,17 @@ static int service_callback(int sock, const struct sockaddr *from,
              MDNS_STRING_FORMAT(addrstr), (unicast ? "unicast" : "multicast"));
 
       if (unicast) {
-        mdns_query_answer_unicast(sock, from, addrlen, sendbuffer,
+        mdns_query_answer_unicast(handle, from, addrlen, sendbuffer,
                                   sizeof(sendbuffer), query_id, rtype, name.str,
                                   name.length, answer, 0, 0, additional,
                                   additional_count);
       } else {
-        mdns_query_answer_multicast(sock, sendbuffer, sizeof(sendbuffer),
+        mdns_query_answer_multicast(handle, sendbuffer, sizeof(sendbuffer),
                                     answer, 0, 0, additional, additional_count);
       }
     }
+  } else {
+    printf("I dont care about this packet\n");
   }
   return 0;
 }
@@ -485,10 +497,11 @@ static int service_mdns(const char *hostname, const char *service_name) {
       additional[additional_count++] = service.record_a;
     additional[additional_count++] = service.txt_record[0];
 
-    for (int isock = 0; isock < num_sockets; ++isock)
-      mdns_announce_multicast(sockets[isock], buffer, capacity,
-                              service.record_ptr, 0, 0, additional,
-                              additional_count);
+    for (int isock = 0; isock < num_sockets; ++isock) {
+      // mdns_announce_multicast(sockets[isock], buffer, capacity,
+      //                         service.record_ptr, 0, 0, additional,
+      //                         additional_count);
+    }
   }
 
   // This is a crude implementation that checks for incoming queries
@@ -529,10 +542,11 @@ static int service_mdns(const char *hostname, const char *service_name) {
       additional[additional_count++] = service.record_a;
     additional[additional_count++] = service.txt_record[0];
 
-    for (int isock = 0; isock < num_sockets; ++isock)
-      mdns_goodbye_multicast(sockets[isock], buffer, capacity,
-                             service.record_ptr, 0, 0, additional,
-                             additional_count);
+    for (int isock = 0; isock < num_sockets; ++isock) {
+      // mdns_goodbye_multicast(sockets[isock], buffer, capacity,
+      //                        service.record_ptr, 0, 0, additional,
+      //                        additional_count);
+    }
   }
 
   free(buffer);
@@ -549,9 +563,23 @@ void signal_handler(int signal) { running = 0; }
 
 static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
                     const struct sockaddr *addr, unsigned flags) {
+  if (nread < 0) {
+    fprintf(stderr, "Read error %s\n", uv_err_name(nread));
+    // free(buf->base);
+    return;
+  }
+  if (nread == 0) {
+    printf("recv end of packet\n");
+    if (buf != NULL && buf->base != NULL) {
 
-  char* service_name = "_http._tcp.local.";
-  char* hostname = "plex";
+      free(buf->base);
+    }
+    return;
+  }
+
+  printf("\nrecv start of packet\n");
+  char *service_name = "_http._tcp.local.";
+  char *hostname = "plex";
   size_t service_name_length = strlen(service_name);
   char *service_name_buffer = malloc(service_name_length + 2);
   memcpy(service_name_buffer, service_name, service_name_length);
@@ -560,17 +588,15 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
   service_name_buffer[service_name_length] = 0;
   service_name = service_name_buffer;
 
-  printf("Service mDNS: %s:%d\n", service_name, 80);
-  printf("Hostname: %s\n", hostname);
-
-  size_t capacity = 2048;
-  void *buffer = malloc(capacity);
+  // printf("Service mDNS: %s:%d\n", service_name, 80);
+  // printf("Hostname: %s\n", hostname);
 
   mdns_string_t service_string =
       (mdns_string_t){service_name, strlen(service_name)};
   mdns_string_t hostname_string = (mdns_string_t){hostname, strlen(hostname)};
 
-  // Build the service instance "<hostname>.<_service-name>._tcp.local." string
+  // Build the service instance "<hostname>.<_service-name>._tcp.local."
+  // string
   char service_instance_buffer[256] = {0};
   snprintf(service_instance_buffer, sizeof(service_instance_buffer) - 1,
            "%.*s.%.*s", MDNS_STRING_FORMAT(hostname_string),
@@ -633,38 +659,43 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
                       .rclass = 0,
                       .ttl = 0};
 
+  mdns_data_t mdns_data = {0};
+  mdns_data.service = &service;
+  mdns_data.handle = req;
 
-  if (nread < 0) {
-    fprintf(stderr, "Read error %s\n", uv_err_name(nread));
-    free(buf->base);
-    return;
+  char sender[17] = {0};
+  uv_ip4_name((const struct sockaddr_in *)addr, sender, 16);
+  printf("Packet from %s\n", sender);
+  printf("Size: %lu %.*s\n", nread, (int)nread, (char *)buf->base);
+  for (int i = 0; i < nread; i++) {
+    printf("%02X", buf->base[i]);
   }
-  if (nread > 0) {
-    char sender[17] = {0};
-    uv_ip4_name((const struct sockaddr_in *)addr, sender, 16);
-    printf("\nPacket from from %s\n", sender);
-    printf("Size: %lu %.*s\n", nread, nread, buf->base);
-    for (int i = 0; i < nread; i++) {
-      printf("%02X", buf->base[i]);
-    }
-    printf("\n");
-    uvmdns_socket_recv(buf, addr, service_callback, &service);
-  }
+  printf("\n");
+  uvmdns_socket_recv(buf, addr, service_callback, &mdns_data);
   free(buf->base);
+  free(service_name_buffer);
+  printf("end of on_recv\n");
 }
 
+static void close_cb(uv_handle_t *handle) { free(handle); }
+
 static void on_walk_cleanup(uv_handle_t *handle, void *data) {
-  uv_close(handle, NULL);
+  if (!uv_is_closing((uv_handle_t *)&handle)) {
+    uv_close(handle, NULL);
+  }
 }
 
 static void on_close(uv_handle_t *handle) {
-  printf("Closing, goodbye");
+  printf("Closing, goodbye\n");
   // http://stackoverflow.com/questions/25615340/closing-libuv-handles-correctly
   uv_stop(uv_loop);
   uv_run(uv_loop, UV_RUN_DEFAULT);
   uv_walk(uv_loop, on_walk_cleanup, NULL);
   uv_run(uv_loop, UV_RUN_DEFAULT);
-  uv_loop_close(uv_loop);
+  int ret = uv_loop_close(uv_loop);
+  if (ret != 0) {
+    fprintf(stderr, "uv_loop_close did not return 0!\n");
+  }
 }
 
 static void on_signal(uv_signal_t *signal, int signum) {
@@ -774,6 +805,7 @@ int main(int argc, char **argv) {
 
   uv_ip4_addr("0.0.0.0", MDNS_PORT, &addr);
 
+  open_client_sockets(0, 0, 0);
   status =
       uv_udp_bind(&server, (const struct sockaddr *)&addr, UV_UDP_REUSEADDR);
   UV_CHECK(status, "bind");
