@@ -19,7 +19,7 @@
   }
 
 static uv_loop_t *uv_loop;
-static uv_udp_t server;
+static uv_udp_t *server = NULL;
 
 static char addrbuffer[64];
 static char namebuffer[256];
@@ -91,12 +91,9 @@ static int service_callback(int sock, const struct sockaddr *from,
                             size_t record_offset, size_t record_length,
                             void *user_data) {
   (void)sizeof(ttl);
-  printf("service_callback: ");
   if (entry != MDNS_ENTRYTYPE_QUESTION) {
-    printf("no\n");
     return 0;
   }
-  printf("yes\n");
 
   const char dns_sd[] = "_services._dns-sd._udp.local.";
   const mdns_data_t *mdns_data = (const mdns_data_t *)user_data;
@@ -677,17 +674,14 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
   printf("end of on_recv\n");
 }
 
-static void close_cb(uv_handle_t *handle) { free(handle); }
-
 static void on_walk_cleanup(uv_handle_t *handle, void *data) {
   if (!uv_is_closing((uv_handle_t *)&handle)) {
     uv_close(handle, NULL);
   }
 }
 
-static void on_close(uv_handle_t *handle) {
+static void on_close() {
   printf("Closing, goodbye\n");
-  // http://stackoverflow.com/questions/25615340/closing-libuv-handles-correctly
   uv_stop(uv_loop);
   uv_run(uv_loop, UV_RUN_DEFAULT);
   uv_walk(uv_loop, on_walk_cleanup, NULL);
@@ -696,14 +690,19 @@ static void on_close(uv_handle_t *handle) {
   if (ret != 0) {
     fprintf(stderr, "uv_loop_close did not return 0!\n");
   }
+  free(server);
 }
 
 static void on_signal(uv_signal_t *signal, int signum) {
   if (uv_is_active((uv_handle_t *)&server)) {
-    uv_udp_recv_stop(&server);
+    uv_udp_recv_stop(server);
   }
-  uv_close((uv_handle_t *)&server, on_close);
   uv_signal_stop(signal);
+  if (server) {
+    uv_close((uv_handle_t *)server, on_close);
+  } else {
+    on_close();
+  }
 }
 
 static void on_alloc(uv_handle_t *handle, size_t suggested_size,
@@ -790,27 +789,29 @@ int main(int argc, char **argv) {
   }
   fclose(fp);
 
+  uv_loop = uv_default_loop();
   int status;
-  struct sockaddr_in addr;
 
   uv_signal_t sigint, sigterm;
-  uv_loop = uv_default_loop();
-
-  status = uv_udp_init(uv_loop, &server);
-  UV_CHECK(status, "init");
   uv_signal_init(uv_loop, &sigint);
   uv_signal_start(&sigint, on_signal, SIGINT);
   uv_signal_init(uv_loop, &sigterm);
   uv_signal_start(&sigterm, on_signal, SIGTERM);
 
+  server = malloc(sizeof(uv_udp_t));
+
+  struct sockaddr_in addr;
   uv_ip4_addr("0.0.0.0", MDNS_PORT, &addr);
 
   open_client_sockets(0, 0, 0);
+
+  status = uv_udp_init(uv_loop, server);
+  UV_CHECK(status, "init");
   status =
-      uv_udp_bind(&server, (const struct sockaddr *)&addr, UV_UDP_REUSEADDR);
+      uv_udp_bind(server, (const struct sockaddr *)&addr, UV_UDP_REUSEADDR);
   UV_CHECK(status, "bind");
 
-  status = uv_udp_recv_start(&server, on_alloc, on_recv);
+  status = uv_udp_recv_start(server, on_alloc, on_recv);
   UV_CHECK(status, "recv");
 
   return uv_run(uv_loop, UV_RUN_DEFAULT);
