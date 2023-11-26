@@ -829,8 +829,15 @@ static inline int mdns_unicast_send(int sock, const void *address,
   return 0;
 }
 
+static void on_send(uv_udp_send_t *req, int status) {
+  free(req);
+  if (status) {
+    fprintf(stderr, "uv_udp_send_cb error: %s\n", uv_strerror(status));
+  }
+}
+
 /*
- * Now with added libuv! Badly, too! It relies on the default loop.
+ * Now with added libuv! Badly, too!
  */
 static inline int uvmdns_multicast_send(uv_udp_t *handle, const void *buffer,
                                         size_t size) {
@@ -858,7 +865,7 @@ static inline int uvmdns_multicast_send(uv_udp_t *handle, const void *buffer,
   uv_udp_send_t *send_req = (uv_udp_send_t *)malloc(sizeof(uv_udp_send_t));
   uv_buf_t send_buf = uv_buf_init((char *)buffer, size);
 
-  int ret = uv_udp_send(send_req, handle, &send_buf, 1, saddr, NULL);
+  int ret = uv_udp_send(send_req, handle, &send_buf, 1, saddr, on_send);
   if (ret < 0) {
     fprintf(stderr, "Send error: %s\n", uv_strerror(ret));
     return -1;
