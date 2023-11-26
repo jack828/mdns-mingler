@@ -820,20 +820,28 @@ mdns_records_parse(int sock, const struct sockaddr *from, size_t addrlen,
   return parsed;
 }
 
-static inline int mdns_unicast_send(int sock, const void *address,
-                                    size_t address_size, const void *buffer,
-                                    size_t size) {
-  if (sendto(sock, (const char *)buffer, (mdns_size_t)size, 0,
-             (const struct sockaddr *)address, (socklen_t)address_size) < 0)
-    return -1;
-  return 0;
-}
-
 static void on_send(uv_udp_send_t *req, int status) {
   free(req);
   if (status) {
     fprintf(stderr, "uv_udp_send_cb error: %s\n", uv_strerror(status));
   }
+}
+
+// WARNING I don't know if this works :c
+static inline int mdns_unicast_send(uv_udp_t *handle, const void *address,
+                                    size_t address_size, const void *buffer,
+                                    size_t size) {
+
+  uv_udp_send_t *send_req = (uv_udp_send_t *)malloc(sizeof(uv_udp_send_t));
+  uv_buf_t send_buf = uv_buf_init((char *)buffer, size);
+
+  int ret = uv_udp_send(send_req, handle, &send_buf, 1,
+                        (const struct sockaddr *)address, on_send);
+  if (ret < 0) {
+    fprintf(stderr, "Send error: %s\n", uv_strerror(ret));
+    return -1;
+  }
+  return 0;
 }
 
 /*
