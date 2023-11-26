@@ -1,13 +1,21 @@
-FROM node:18-alpine
+FROM alpine as build-env
 
-WORKDIR /src/app
+RUN apk add --no-cache build-base pkgconfig libuv-dev argp-standalone
 
-COPY package.json yarn.lock .
+WORKDIR /app
 
-RUN yarn install --frozen-lockfile && yarn cache clean
+COPY . .
 
-COPY index.js .
+RUN make mdns EXTRA_LDFLAGS=-largp
+
+FROM alpine
+
+RUN apk add --no-cache libuv-dev
+
+COPY --from=build-env /app/mdns /app/mdns
+
+WORKDIR /app
 
 EXPOSE 5353/udp
 
-CMD ["/src/app/index.js"]
+CMD ["/app/mdns"]

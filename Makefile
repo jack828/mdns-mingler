@@ -1,13 +1,14 @@
 CC=gcc
 CFLAGS=-pedantic -Wall #-Werror
 LDFLAGS=`pkg-config --libs libuv`
-DEBUGFLAGS=-ggdb -O0
+EXTRA_LDFLAGS ?=
+DEBUGFLAGS=-ggdb -g -O0 -g3
 TARGET=mdns
 
 .PHONY: $(TARGET) clean watch debug
 
 $(TARGET):
-	$(CC) $(TARGET).c $(CFLAGS) $(LDFLAGS) -o $(TARGET)
+	$(CC) $(TARGET).c $(CFLAGS) $(LDFLAGS) $(EXTRA_LDFLAGS) -o $(TARGET)
 
 # I used the make to make the make
 watch:
