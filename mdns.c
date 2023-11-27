@@ -463,23 +463,22 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
     return;
   }
   if (nread == 0) {
-    printf("recv end of packet\n");
     if (buf != NULL && buf->base != NULL) {
       free(buf->base);
     }
     return;
   }
 
-  printf("\nrecv start of packet\n");
-
   char sender[17] = {0};
   uv_ip4_name((const struct sockaddr_in *)addr, sender, 16);
+  /*
   printf("Packet from %s (%lu)\n", sender, nread);
-  /* printf("Size: %lu %.*s\n", nread, (int)nread, (char *)buf->base);
+  printf("Size: %lu %.*s\n", nread, (int)nread, (char *)buf->base);
   for (int i = 0; i < nread; i++) {
     printf("%02X", buf->base[i]);
   }
-  printf("\n"); */
+  printf("\n");
+  */
 
   for (int i = 0; i < services_count; i++) {
     mdns_data_t mdns_data = {0};
@@ -488,7 +487,6 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
     uvmdns_socket_recv(buf, addr, service_callback, &mdns_data);
   }
   free(buf->base);
-  printf("end of on_recv\n");
 }
 
 static void on_walk_cleanup(uv_handle_t *handle, void *data) {
@@ -639,5 +637,4 @@ int main(int argc, char **argv) {
 
   printf("Ready!\n");
   return uv_run(uv_loop, UV_RUN_DEFAULT);
-  // return service_mdns("plex", arguments.service);
 }

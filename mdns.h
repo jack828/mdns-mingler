@@ -342,10 +342,6 @@ static inline size_t mdns_string_table_find(mdns_string_table_t *string_table,
                                             size_t first_length,
                                             size_t total_length);
 
-static inline int uvmdns_unicast_send(int sock, const void *address,
-                                      size_t address_size, const void *buffer,
-                                      size_t size);
-
 static inline size_t uvmdns_socket_recv(const uv_buf_t *buf,
                                         const struct sockaddr *addr,
                                         mdns_record_callback_fn callback,
@@ -858,16 +854,8 @@ static inline int uvmdns_multicast_send(uv_udp_t *handle, const void *buffer,
   addr.sin_port = htons((unsigned short)MDNS_PORT);
   saddr = (struct sockaddr *)&addr;
 
-  printf("\tSend start!\n");
-
   char sender[17] = {0};
   uv_ip4_name(&addr, sender, 16);
-  printf("\tPacket to %s\n", sender);
-  printf("\tSize: %lu %.*s\n\t", size, (int)size, (char *)buffer);
-  for (int i = 0; i < size; i++) {
-    printf("%02X", ((const char *)buffer)[i]);
-  }
-  printf("\n");
 
   uv_udp_send_t *send_req = (uv_udp_send_t *)malloc(sizeof(uv_udp_send_t));
   uv_buf_t send_buf = uv_buf_init((char *)buffer, size);
@@ -877,8 +865,6 @@ static inline int uvmdns_multicast_send(uv_udp_t *handle, const void *buffer,
     fprintf(stderr, "Send error: %s\n", uv_strerror(ret));
     return -1;
   }
-
-  printf("\tSend ok!\n");
   return 0;
 }
 
@@ -1579,16 +1565,6 @@ static inline size_t uvmdns_socket_recv(const uv_buf_t *buf,
                                additional_rrs, callback, user_data);
 
   return total_records;
-}
-
-static inline int uvmdns_unicast_send(int sock, const void *address,
-                                      size_t address_size, const void *buffer,
-                                      size_t size) {
-
-  // if (sendto(sock, (const char *)buffer, (mdns_size_t)size, 0,
-  // (const struct sockaddr *)address, (socklen_t)address_size) < 0)
-  // return -1;
-  return 0;
 }
 
 #ifdef _WIN32
