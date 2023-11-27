@@ -14,6 +14,8 @@ typedef struct {
   mdns_record_t record_srv;
   mdns_record_t record_a;
   mdns_record_t txt_record[2];
+  void *buffer;
+  int buffer_size;
 } service_t;
 
 service_t service_create(char *ip, char *host);
@@ -63,6 +65,9 @@ service_t service_create(char *ip, char *hostname) {
   service.hostname_qualified = hostname_qualified_string;
   service.address_ipv4 = service_address;
   service.port = 80;
+  // utility buffer for announce/goodbye
+  service.buffer_size = 2048;
+  service.buffer = malloc(service.buffer_size);
 
   // Setup our mDNS records
 
@@ -110,4 +115,5 @@ void service_free(service_t *service) {
   free((char *)service->service.str);
   free((char *)service->service_instance.str);
   free((char *)service->hostname_qualified.str);
+  free(service->buffer);
 }

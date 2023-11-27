@@ -21,6 +21,7 @@
 
 static uv_loop_t *uv_loop;
 static uv_udp_t *server = NULL;
+static uv_timer_t *timer = NULL;
 
 static char addrbuffer[64];
 static char namebuffer[256];
@@ -489,6 +490,26 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
   free(buf->base);
 }
 
+static void announce_services(uv_timer_t *timer) {
+  uv_timer_stop(timer);
+  printf("Sending announce\n");
+
+  for (int i = 0; i < services_count; i++) {
+    service_t service = services[i];
+    mdns_record_t additional[5] = {0};
+    size_t additional_count = 0;
+    additional[additional_count++] = service.record_srv;
+    if (service.address_ipv4.sin_family == AF_INET)
+      additional[additional_count++] = service.record_a;
+    additional[additional_count++] = service.txt_record[0];
+
+    mdns_announce_multicast(server, service.buffer, service.buffer_size,
+                            service.record_ptr, 0, 0, additional,
+                            additional_count);
+  }
+  printf("Announced!\n");
+}
+
 static void on_walk_cleanup(uv_handle_t *handle, void *data) {
   if (!uv_is_closing((uv_handle_t *)&handle)) {
     uv_close(handle, NULL);
@@ -509,6 +530,7 @@ static void on_close() {
     service_free(&services[i]);
   }
   free(services);
+  free(timer);
   free(server);
 }
 
@@ -634,6 +656,10 @@ int main(int argc, char **argv) {
 
   status = uv_udp_recv_start(server, on_alloc, on_recv);
   UV_CHECK(status, "recv");
+
+  timer = malloc(sizeof(uv_timer_t));
+  uv_timer_init(uv_loop, timer);
+  uv_timer_start(timer, announce_services, 0, 0);
 
   printf("Ready!\n");
   return uv_run(uv_loop, UV_RUN_DEFAULT);
