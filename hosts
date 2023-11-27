@@ -1,6 +1,9 @@
 # WARNING
 # The hosts parser is very primitive, and will break easily
 # But it does support comments!
+# NOTE that the format is
+# ip    host
+# and requires hosts NOT to end in .local
 
-192.168.1.10 plex.local
-192.168.1.10 sonarr.local
+192.168.1.10  plex
+192.168.1.10   sonarr

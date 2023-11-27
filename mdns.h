@@ -827,7 +827,6 @@ static void on_send(uv_udp_send_t *req, int status) {
   }
 }
 
-// WARNING I don't know if this works :c
 static inline int mdns_unicast_send(uv_udp_t *handle, const void *address,
                                     size_t address_size, const void *buffer,
                                     size_t size) {

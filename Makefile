@@ -12,13 +12,13 @@ $(TARGET):
 
 # I used the make to make the make
 watch:
-	nodemon --exec "make $(TARGET) && ./$(TARGET) || exit 1" --watch $(TARGET).c --watch mdns.h
+	nodemon --exec "make $(TARGET) && ./$(TARGET) || exit 1" --watch $(TARGET).c --watch mdns.h --watch service.h
 
 debug:
 	$(CC) $(TARGET).c $(CFLAGS) -o $(TARGET).debug $(LDFLAGS) $(DEBUGFLAGS)
 
 run-valgrind:
-	valgrind \
+	valgrind -s \
 		--tool=memcheck \
 		--leak-check=full \
 		--track-origins=yes \
