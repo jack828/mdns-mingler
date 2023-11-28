@@ -22,7 +22,7 @@ $(TARGET):
 
 # I used the make to make the make
 watch:
-	nodemon --exec "make $(TARGET) && ./$(TARGET) || exit 1" --watch $(TARGET).c --watch mdns.h --watch service.h
+	nodemon --signal SIGTERM --exec "make $(TARGET) && ./$(TARGET) || exit 1" --watch $(TARGET).c --watch mdns.h --watch service.h
 
 debug:
 	$(CC) $(TARGET).c $(CFLAGS) -o $(TARGET).debug $(LDFLAGS) $(DEBUGFLAGS)
