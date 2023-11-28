@@ -320,6 +320,7 @@ static void on_recv(uv_udp_t *req, ssize_t nread, const uv_buf_t *buf,
 
 static void announce_services(uv_timer_t *timer) {
   uv_timer_stop(timer);
+  uv_close((uv_handle_t *)timer, NULL);
   printf("Sending announce\n");
 
   for (int i = 0; i < services_count; i++) {
@@ -340,6 +341,7 @@ static void announce_services(uv_timer_t *timer) {
 
 static void goodbye_services(uv_timer_t *timer) {
   uv_timer_stop(timer);
+  uv_close((uv_handle_t *)timer, NULL);
   printf("Sending goodbye\n");
 
   for (int i = 0; i < services_count; i++) {
@@ -359,7 +361,7 @@ static void goodbye_services(uv_timer_t *timer) {
 }
 
 static void on_walk_cleanup(uv_handle_t *handle, void *data) {
-  if (!uv_is_closing((uv_handle_t *)&handle)) {
+  if (!uv_is_closing(handle)) {
     uv_close(handle, NULL);
   }
 }
