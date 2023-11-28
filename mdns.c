@@ -511,10 +511,14 @@ int main(int argc, char **argv) {
   UV_CHECK(status, "recv");
 
   announce_timer = malloc(sizeof(uv_timer_t));
-  uv_timer_init(uv_loop, announce_timer);
-  uv_timer_start(announce_timer, announce_services, 0, 0);
+  status = uv_timer_init(uv_loop, announce_timer);
+  UV_CHECK(status, "announce timer_init");
+  status =uv_timer_start(announce_timer, announce_services, 0, 0);
+  UV_CHECK(status, "announce timer_start");
+
   goodbye_timer = malloc(sizeof(uv_timer_t));
-  uv_timer_init(uv_loop, goodbye_timer);
+  status = uv_timer_init(uv_loop, goodbye_timer);
+  UV_CHECK(status, "goodbye timer_init");
 
   printf("Ready!\n");
   return uv_run(uv_loop, UV_RUN_DEFAULT);
