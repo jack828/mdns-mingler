@@ -1,5 +1,15 @@
 CC=gcc
-CFLAGS=-pedantic -Wall #-Werror
+CFLAGS= -Wall \
+    -Wextra \
+    -Werror=pedantic \
+    -Wpedantic \
+    -Wno-unused-parameter \
+    -Wundef \
+    -Wshadow \
+    -Wformat=2 \
+    -Wfloat-equal \
+    -Wunreachable-code \
+    -std=gnu17
 LDFLAGS=`pkg-config --libs libuv`
 EXTRA_LDFLAGS ?=
 DEBUGFLAGS=-ggdb -g -O0 -g3
