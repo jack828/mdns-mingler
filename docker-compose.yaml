@@ -5,7 +5,7 @@ services:
       dockerfile: ./Dockerfile
     container_name: mdns-mingler
     volumes:
-      - ./hosts:/hosts:ro
+      - ./hosts:/app/hosts:ro
     ports:
       - 127.0.0.1:5353:5353
 

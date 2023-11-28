@@ -7,7 +7,7 @@ Read more including installation and usage with Traefik on my blog <https://jack
 ## Usage
 
 ```
-docker run jack828/mdns-mingler:latest -v ./hosts:/hosts:ro --network=host
+docker run jack828/mdns-mingler:latest -v ./hosts:/app/hosts:ro --network=host
 ```
 
 This NEEDS host networking enabled because of limitations with how Linux kernels provide [support for multicast routing](https://github.com/moby/libnetwork/issues/2397#issuecomment-935029813).
@@ -25,10 +25,16 @@ ip           hostname
 e.g.
 
 ```
-192.168.1.10   plex.local
-192.168.1.10   sonarr.local
-192.168.111.11 somethingelse.local
+192.168.1.10   plex
+192.168.1.10   sonarr
+192.168.111.11 somethingelse
 ```
+
+Your hosts will then resolve with the .local domain, e.g. `plex.local`.
+
+Watching is not currently supported, though it would be nice, so if you change the hosts file you will need to restart the container.
+
+(For those keen enough to submit a PR - see [uv_fs_event_t](https://docs.libuv.org/en/v1.x/fs_event.html)!)
 
 ## IPv6
 
@@ -55,3 +61,5 @@ See the [Makefile](./Makefile) for commands etc.
 # License
 
 MIT
+
+mdns.h is Public Domain from [Mattias Jansson](https://github.com/mjansson/mdns). My additions and modifications of this file also enter the Public Domain.
